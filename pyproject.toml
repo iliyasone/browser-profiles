@@ -1,0 +1,31 @@
+[project]
+name = "browser-profiles"
+version = "0.1.0"
+description = "Persistent Chromium profiles, each behind its own proxy, opened from any browser through a token-protected API"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "docker>=7.1",
+    "fastapi>=0.115",
+    "httpx[socks]>=0.27",
+    "pydantic>=2.8",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "pyright>=1.1.380"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+include = ["app", "tests"]
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
