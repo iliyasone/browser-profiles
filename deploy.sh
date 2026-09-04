@@ -6,5 +6,7 @@ cd "$(dirname "$0")"
 git fetch -q origin main
 git reset -q --hard origin/main
 docker compose up -d --build --remove-orphans
+# The gateway's config is a bind mount, so a change to it needs a reload, not a recreate.
+docker compose exec -T gateway nginx -s reload
 docker image prune -f >/dev/null
 echo "deployed $(git rev-parse --short HEAD)"
