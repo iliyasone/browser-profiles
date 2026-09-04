@@ -3,18 +3,22 @@ plus, when the profile has a proxy, a forwarder sharing its network namespace
 so Chromium can use an authenticated upstream through plain 127.0.0.1:18080."""
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import docker
 import docker.errors
+import httpx
 from docker.models.containers import Container
 
 from app.store import ProfileSpec
 
 CONTAINER_PREFIX = "bp"  # the gateway routes /b/<name>/ to bp-<name>:3000
 FORWARDER_PORT = 18080
+SCREEN_PORT = 3000
+READY_TIMEOUT_SECONDS = 90
 
 Status = Literal["running", "stopped", "absent"]
 
@@ -124,6 +128,24 @@ class Runtime:
                 restart_policy={"Name": "unless-stopped"},  # pyright: ignore[reportArgumentType, reportCallIssue]
                 labels={"browser-profiles.profile": spec.name},
             )
+
+        self.wait_until_ready(spec.name)
+
+    def wait_until_ready(self, name: str) -> bool:
+        """Poll the container's own web server until it serves the screen page.
+        Chromium's image takes a while after `docker run` to bring nginx up;
+        opening the URL before that shows a gateway error. False on timeout —
+        the containers keep starting, the caller just cannot promise a screen."""
+        deadline = time.monotonic() + READY_TIMEOUT_SECONDS
+        url = f"http://{CONTAINER_PREFIX}-{name}:{SCREEN_PORT}/b/{name}/"
+        while time.monotonic() < deadline:
+            try:
+                if httpx.get(url, timeout=3).status_code < 500:
+                    return True
+            except httpx.HTTPError:
+                pass
+            time.sleep(1)
+        return False
 
     def stop(self, name: str) -> None:
         for suffix in ("-proxy", ""):

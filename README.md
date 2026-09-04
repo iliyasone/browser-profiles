@@ -88,7 +88,7 @@ curl -s -X POST localhost:8080/profiles -H "Authorization: Bearer $API_TOKEN" \
 | `POST /profiles` | Create; `"start": false` to only write it down. Names: `[a-z0-9][a-z0-9-]{0,30}`. `proxy` may be omitted for a direct connection; `scheme` is `http` or `socks5`. |
 | `GET /profiles/{name}` | One profile. |
 | `PATCH /profiles/{name}` | Change `proxy`, `timezone`, `start_url` (`"clear_proxy": true` removes the proxy). A running profile has its two containers removed and created again so the change applies; the directory, and so cookies and logins, stays. Reload an open screen afterwards. |
-| `POST /profiles/{name}/start` | Create the two containers if they are not running. Also the fix when the screen loads but pages don't: the forwarder shares the browser container's network namespace, and if Docker restarted only the browser that link is gone; `start` recreates both. |
+| `POST /profiles/{name}/start` | Create the two containers if they are not running and return once the screen answers (up to 90 s), so `ui_url` can be opened straight away. Meanwhile the screen URL shows a page that retries every 3 seconds. Also the fix when the screen loads but pages don't: the forwarder shares the browser container's network namespace, and if Docker restarted only the browser that link is gone; `start` recreates both. |
 | `POST /profiles/{name}/stop` | Stop the containers, keep everything on disk. |
 | `DELETE /profiles/{name}` | Remove the containers and forget the profile. `?purge=true` also deletes the directory; without it the Chromium home stays and a new profile of the same name reuses it. |
 | `POST /profiles/{name}/egress` | Dial the profile's proxy from the API and return what `EGRESS_URL` sees (exit IP, city, country); works while stopped. |
