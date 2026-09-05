@@ -45,6 +45,7 @@ curl -s localhost:8080/healthz
 | `LISTEN` | Gateway bind, default `127.0.0.1:8080`. |
 | `BROWSER_UI_USER` / `BROWSER_UI_PASSWORD` | Optional HTTP basic auth on the profile screens (`/b/<name>/`) only; `/profiles*` always uses the bearer token. |
 | `EGRESS_URL` | What the egress check fetches through the proxy; default `https://ipinfo.io/json`. Set it in the `api` service environment. |
+| `IDLE_STOP_MINUTES` | Stop a running profile once no one has had its screen open for this long (default 15; 0 = never). A viewer holds a WebSocket to the profile's container, so "open screen" = an established connection on its screen port, checked every 30 s. Cookies stay; `start` brings it back. |
 
 The profile screens have no authentication beyond that optional basic auth.
 Expose the gateway only through something that authenticates (Cloudflare

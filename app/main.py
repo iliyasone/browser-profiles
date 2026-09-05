@@ -1,6 +1,9 @@
 import os
 import secrets
-from datetime import datetime
+import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -9,12 +12,31 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from app.idle import IdleStop
 from app.runtime import Runtime, Settings, Status
 from app.store import NAME_PATTERN, ProfileSpec, Proxy, Store
 
 EGRESS_URL = os.environ.get("EGRESS_URL", "https://ipinfo.io/json")
+# A running profile with no open screen for this long is stopped (0 = never).
+IDLE_STOP_MINUTES = float(os.environ.get("IDLE_STOP_MINUTES", "15"))
+IDLE_CHECK_SECONDS = 30
 
-app = FastAPI(title="browser-profiles", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    halt = threading.Event()
+    if IDLE_STOP_MINUTES > 0:
+        idle = IdleStop(store(), runtime(), timedelta(minutes=IDLE_STOP_MINUTES))
+        threading.Thread(
+            target=idle.run_forever, args=(IDLE_CHECK_SECONDS, halt), daemon=True
+        ).start()
+    try:
+        yield
+    finally:
+        halt.set()
+
+
+app = FastAPI(title="browser-profiles", version="0.1.0", lifespan=lifespan)
 
 
 def require_token(authorization: Annotated[str | None, Header()] = None) -> None:

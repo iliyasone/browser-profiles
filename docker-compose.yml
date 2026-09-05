@@ -9,6 +9,7 @@ services:
       DOCKER_NETWORK: browser-profiles
       BROWSER_UI_USER: ${BROWSER_UI_USER:-}
       BROWSER_UI_PASSWORD: ${BROWSER_UI_PASSWORD:-}
+      IDLE_STOP_MINUTES: ${IDLE_STOP_MINUTES:-15}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOST_DATA_DIR:?set HOST_DATA_DIR in .env}:/data
