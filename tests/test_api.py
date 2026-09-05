@@ -21,6 +21,9 @@ class FakeRuntime:
     def start(self, spec: ProfileSpec) -> None:
         self.running.add(spec.name)
 
+    def viewers(self, name: str) -> int:
+        return 0
+
     def stop(self, name: str) -> None:
         self.running.discard(name)
 

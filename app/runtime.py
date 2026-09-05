@@ -13,6 +13,7 @@ import docker.errors
 import httpx
 from docker.models.containers import Container
 
+from app.idle import established_on_port
 from app.store import ProfileSpec
 
 CONTAINER_PREFIX = "bp"  # the gateway routes /b/<name>/ to bp-<name>:3000
@@ -146,6 +147,18 @@ class Runtime:
                 pass
             time.sleep(1)
         return False
+
+    def viewers(self, name: str) -> int:
+        """How many screens of this profile are open right now: established
+        connections to the container's screen port, read from its own
+        `/proc/net/tcp`. Zero when it is not running."""
+        browser = self._container(f"{CONTAINER_PREFIX}-{name}")
+        if browser is None or browser.status != "running":
+            return 0
+        result = browser.exec_run(["cat", "/proc/net/tcp", "/proc/net/tcp6"])
+        if result.exit_code != 0 or not isinstance(result.output, bytes):
+            return 0
+        return established_on_port(result.output.decode(errors="replace"), SCREEN_PORT)
 
     def stop(self, name: str) -> None:
         for suffix in ("-proxy", ""):
