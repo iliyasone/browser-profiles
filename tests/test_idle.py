@@ -63,6 +63,14 @@ def test_stops_a_profile_nobody_watched_for_the_timeout() -> None:
     now = 15 * 60
     assert idle.tick() == ["a"]  # b is being watched, a is not
     assert browsers.running == {"b"}
+    assert idle.report() == {
+        "timeout_seconds": 900.0,
+        "ticks": 3,
+        "last_tick_seconds_ago": 0,
+        "watched": ["b"],
+        "stopped_total": 1,
+        "last_error": None,
+    }
 
     browsers.watching = set()
     now = 29 * 60

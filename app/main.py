@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 import threading
@@ -22,11 +23,16 @@ IDLE_STOP_MINUTES = float(os.environ.get("IDLE_STOP_MINUTES", "15"))
 IDLE_CHECK_SECONDS = 30
 
 
+# uvicorn configures only its own loggers; ours would otherwise be silent.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(name)s: %(message)s")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     halt = threading.Event()
     if IDLE_STOP_MINUTES > 0:
         idle = IdleStop(store(), runtime(), timedelta(minutes=IDLE_STOP_MINUTES))
+        app.state.idle = idle
         threading.Thread(
             target=idle.run_forever, args=(IDLE_CHECK_SECONDS, halt), daemon=True
         ).start()
@@ -106,8 +112,11 @@ class UpdateProfile(BaseModel):
 
 
 @app.get("/healthz")
-def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+def healthz() -> dict[str, object]:
+    """Liveness, plus what the idle-stop loop has been doing (`"off"` when
+    IDLE_STOP_MINUTES is 0)."""
+    idle: IdleStop | None = getattr(app.state, "idle", None)
+    return {"status": "ok", "idle_stop": idle.report() if idle else "off"}
 
 
 @app.get("/", include_in_schema=False)

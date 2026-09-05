@@ -63,10 +63,17 @@ class IdleStop:
         self.timeout = timeout.total_seconds()
         self.clock = clock
         self.last_viewed: dict[str, float] = {}
+        # For /healthz: proof the loop is alive and what it last did.
+        self.ticks = 0
+        self.last_tick: float | None = None
+        self.stopped_total = 0
+        self.last_error: str | None = None
 
     def tick(self) -> list[str]:
         """Stop what is idle; returns the names stopped."""
         now = self.clock()
+        self.ticks += 1
+        self.last_tick = now
         stopped: list[str] = []
         running = {
             spec.name
@@ -84,11 +91,25 @@ class IdleStop:
                 self.browsers.stop(name)
                 del self.last_viewed[name]
                 stopped.append(name)
+                self.stopped_total += 1
         return stopped
+
+    def report(self) -> dict[str, object]:
+        return {
+            "timeout_seconds": self.timeout,
+            "ticks": self.ticks,
+            "last_tick_seconds_ago": (
+                None if self.last_tick is None else round(self.clock() - self.last_tick)
+            ),
+            "watched": sorted(self.last_viewed),
+            "stopped_total": self.stopped_total,
+            "last_error": self.last_error,
+        }
 
     def run_forever(self, interval: float, stop: threading.Event) -> None:
         while not stop.wait(interval):
             try:
                 self.tick()
-            except Exception:  # noqa: BLE001 - keep the loop alive, whatever Docker says
+            except Exception as error:  # noqa: BLE001 - keep the loop alive, whatever Docker says
+                self.last_error = f"{type(error).__name__}: {error}"
                 log.exception("idle check failed")
