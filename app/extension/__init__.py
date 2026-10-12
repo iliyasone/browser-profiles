@@ -1,0 +1,62 @@
+"""The profile's built-in extension: saved logins for the sites the profile is
+used on.
+
+Chromium reads an unpacked extension once, at launch, so the extension is
+written per profile right before its container starts: a static content script
+plus the profile's logins baked into `logins.js` and into the manifest's site
+patterns. The content script runs only on those sites (every login of the
+profile is loaded there, in the extension's isolated world, which the page's
+own scripts cannot read); no other site gets them."""
+
+import json
+import shutil
+from pathlib import Path
+from urllib.parse import urlsplit
+
+from app.store import Login
+
+CONTENT_SCRIPT = Path(__file__).parent / "content.js"
+
+
+def write(directory: Path, logins: list[Login]) -> None:
+    """Replace `directory` with the extension for `logins`. A login's site is
+    its URL's host without `www.`, subdomains included: a sign-in page often
+    lives on another subdomain than the one the profile starts on."""
+    shutil.rmtree(directory, ignore_errors=True)
+    directory.mkdir(parents=True)
+    entries = []
+    patterns: list[str] = []
+    for login in logins:
+        host = (urlsplit(login.url).hostname or "").removeprefix("www.")
+        entries.append(
+            {
+                "host": host,
+                "username": login.username,
+                "password": login.password,
+                "totp_secret": login.totp_secret,
+            }
+        )
+        # https only: the profile's traffic crosses a third-party proxy, which
+        # could serve a plain-http page with a password field of its own.
+        for pattern in (f"https://{host}/*", f"https://*.{host}/*"):
+            if pattern not in patterns:
+                patterns.append(pattern)
+    manifest = {
+        "manifest_version": 3,
+        "name": "Saved logins",
+        "version": "1.0",
+        "description": "Fills this profile's sign-in forms and shows their codes.",
+        "permissions": ["storage"],
+        "content_scripts": [
+            {
+                "matches": patterns,
+                "js": ["logins.js", "content.js"],
+                "run_at": "document_idle",
+            }
+        ],
+    }
+    (directory / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    (directory / "logins.js").write_text(
+        f"globalThis.SAVED_LOGINS = {json.dumps(entries)};\n"
+    )
+    shutil.copy(CONTENT_SCRIPT, directory / "content.js")

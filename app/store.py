@@ -37,11 +37,23 @@ class Proxy(BaseModel):
         return f"{self.scheme}://{who}{self.host}:{self.port}"
 
 
+class Login(BaseModel):
+    """A sign-in the profile's built-in extension offers on its site: it fills
+    the form and shows the authenticator code computed from `totp_secret`."""
+
+    url: str = Field(pattern=r"^https?://[^/]+")
+    username: str
+    password: str
+    totp_secret: str | None = Field(default=None, pattern=r"^[A-Za-z2-7 =]+$")
+    """Base32, the key an authenticator app is set up with."""
+
+
 class ProfileSpec(BaseModel):
     name: str = Field(pattern=NAME_PATTERN)
     proxy: Proxy | None = None
     timezone: str = "UTC"
     start_url: str = "about:blank"
+    logins: list[Login] = []
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -76,7 +88,8 @@ class Store:
         (directory / "profile.json").write_text(spec.model_dump_json(indent=2) + "\n")
 
     def delete(self, name: str, purge: bool) -> None:
-        """Forget the profile; with `purge` also destroy its Chromium home."""
+        """Forget the profile and its saved logins; with `purge` also destroy its
+        Chromium home."""
         if not _NAME_RE.match(name):
             raise KeyError(name)
         directory = self.root / name
@@ -84,3 +97,9 @@ class Store:
             shutil.rmtree(directory, ignore_errors=True)
         else:
             (directory / "profile.json").unlink(missing_ok=True)
+            self.forget_logins(name)
+
+    def forget_logins(self, name: str) -> None:
+        """Delete the profile's written-out extension, the one copy of its
+        passwords outside `profile.json`; the next start writes it afresh."""
+        shutil.rmtree(self.root / name / "extension", ignore_errors=True)

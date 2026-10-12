@@ -81,3 +81,58 @@ def test_lifecycle(client: TestClient) -> None:
     assert [p["name"] for p in client.get("/profiles", headers=auth).json()] == ["one"]
     assert client.delete("/profiles/one?purge=true", headers=auth).status_code == 204
     assert client.get("/profiles/one", headers=auth).status_code == 404
+
+
+def test_logins_are_redacted_and_an_unchanged_patch_keeps_running(
+    client: TestClient,
+) -> None:
+    auth = {"Authorization": "Bearer secret"}
+    login = {
+        "url": "https://www.example.com/en/",
+        "username": "alice",
+        "password": "hunter2",
+        "totp_secret": "JBSWY3DPEHPK3PXP",
+    }
+    created = client.post(
+        "/profiles", json={"name": "one", "logins": [login]}, headers=auth
+    ).json()
+    assert created["logins"] == [
+        {"url": "https://www.example.com/en/", "username": "alice", "totp": True}
+    ]
+    assert "hunter2" not in str(created)
+    assert "JBSWY3DPEHPK3PXP" not in str(created)
+
+    runtime = main.app.state.runtime
+    restarts: list[str] = []
+    runtime.remove = restarts.append
+    client.patch("/profiles/one", json={"logins": [login]}, headers=auth)
+    assert restarts == []
+    # Omitted optional fields compare equal to their stored defaults.
+    bare = {k: v for k, v in login.items() if k != "totp_secret"}
+    client.patch("/profiles/one", json={"logins": [bare]}, headers=auth)
+    client.patch("/profiles/one", json={"logins": [bare]}, headers=auth)
+    assert restarts == ["one"]
+    restarts.clear()
+    client.patch(
+        "/profiles/one",
+        json={"logins": [{**login, "password": "changed"}]},
+        headers=auth,
+    )
+    assert restarts == ["one"]
+
+
+def test_changed_logins_leave_no_old_extension_on_a_profile_not_running(
+    client: TestClient, tmp_path: Path
+) -> None:
+    auth = {"Authorization": "Bearer secret"}
+    login = {"url": "https://example.com", "username": "a", "password": "old"}
+    client.post(
+        "/profiles",
+        json={"name": "one", "logins": [login], "start": False},
+        headers=auth,
+    )
+    (tmp_path / "one" / "extension").mkdir()
+    client.patch(
+        "/profiles/one", json={"logins": [{**login, "password": "new"}]}, headers=auth
+    )
+    assert not (tmp_path / "one" / "extension").exists()

@@ -3,6 +3,7 @@ plus, when the profile has a proxy, a forwarder sharing its network namespace
 so Chromium can use an authenticated upstream through plain 127.0.0.1:18080."""
 
 import os
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,7 @@ import docker.errors
 import httpx
 from docker.models.containers import Container
 
+from app import extension
 from app.idle import established_on_port
 from app.store import ProfileSpec
 
@@ -20,6 +22,7 @@ CONTAINER_PREFIX = "bp"  # the gateway routes /b/<name>/ to bp-<name>:3000
 FORWARDER_PORT = 18080
 SCREEN_PORT = 3000
 READY_TIMEOUT_SECONDS = 90
+EXTENSION_DIR = "/extension"  # the saved-logins extension inside the container
 
 Status = Literal["running", "stopped", "absent"]
 
@@ -70,7 +73,7 @@ class Runtime:
     def start(self, spec: ProfileSpec) -> None:
         """(Re)create the profile's containers. Idempotent: a healthy running
         pair is left alone; anything else is torn down and built again, so this
-        is also the way to apply a changed proxy or timezone."""
+        is also the way to apply a changed proxy, timezone or set of logins."""
         browser = self._container(f"{CONTAINER_PREFIX}-{spec.name}")
         forwarder = self._container(f"{CONTAINER_PREFIX}-{spec.name}-proxy")
         if browser is not None and browser.status == "running":
@@ -88,6 +91,26 @@ class Runtime:
         chrome_flags = [spec.start_url]
         if spec.proxy is not None:
             chrome_flags.insert(0, f"--proxy-server=http://127.0.0.1:{FORWARDER_PORT}")
+        volumes = {
+            str(s.host_data_dir / spec.name / "config"): {
+                "bind": "/config",
+                "mode": "rw",
+            }
+        }
+        if spec.logins:
+            extension.write(s.data_dir / spec.name / "extension", spec.logins)
+            volumes[str(s.host_data_dir / spec.name / "extension")] = {
+                "bind": EXTENSION_DIR,
+                "mode": "ro",
+            }
+            # Chromium 137+ ignores --load-extension unless this feature is off.
+            chrome_flags[:0] = [
+                f"--load-extension={EXTENSION_DIR}",
+                "--disable-features=DisableLoadExtensionCommandLineSwitch",
+            ]
+        else:
+            # Passwords dropped from the spec do not linger on disk.
+            shutil.rmtree(s.data_dir / spec.name / "extension", ignore_errors=True)
         environment = {
             "PUID": "1000",
             "PGID": "1000",
@@ -104,12 +127,7 @@ class Runtime:
             name=f"{CONTAINER_PREFIX}-{spec.name}",
             detach=True,
             environment=environment,
-            volumes={
-                str(s.host_data_dir / spec.name / "config"): {
-                    "bind": "/config",
-                    "mode": "rw",
-                }
-            },
+            volumes=volumes,
             shm_size=s.shm_size,
             security_opt=["seccomp=unconfined"],
             network=s.network,
