@@ -88,11 +88,29 @@ curl -s -X POST localhost:8080/profiles -H "Authorization: Bearer $API_TOKEN" \
 | `GET /profiles` | Every profile with its status (`running`, `stopped`, `absent` = no containers), redacted proxy, directory and screen URL. |
 | `POST /profiles` | Create; `"start": false` to only write it down. Names: `[a-z0-9][a-z0-9-]{0,30}`. `proxy` may be omitted for a direct connection; `scheme` is `http` or `socks5`. |
 | `GET /profiles/{name}` | One profile. |
-| `PATCH /profiles/{name}` | Change `proxy`, `timezone`, `start_url` (`"clear_proxy": true` removes the proxy). A running profile has its two containers removed and created again so the change applies; the directory, and so cookies and logins, stays. Reload an open screen afterwards. |
+| `PATCH /profiles/{name}` | Change `proxy`, `timezone`, `start_url`, `logins` (`"clear_proxy": true` removes the proxy). A running profile has its two containers removed and created again so the change applies; the directory, and so cookies and logins, stays. Reload an open screen afterwards. A PATCH that changes nothing touches nothing, so a caller can send its whole wanted state every time. |
 | `POST /profiles/{name}/start` | Create the two containers if they are not running and return once the screen answers (up to 90 s), so `ui_url` can be opened straight away. Meanwhile the screen URL shows a page that retries every 3 seconds. Also the fix when the screen loads but pages don't: the forwarder shares the browser container's network namespace, and if Docker restarted only the browser that link is gone; `start` recreates both. |
 | `POST /profiles/{name}/stop` | Stop the containers, keep everything on disk. |
 | `DELETE /profiles/{name}` | Remove the containers and forget the profile. `?purge=true` also deletes the directory; without it the Chromium home stays and a new profile of the same name reuses it. |
 | `POST /profiles/{name}/egress` | Dial the profile's proxy from the API and return what `EGRESS_URL` sees (exit IP, city, country); works while stopped. |
+
+### Saved logins
+
+A profile may carry `logins`, each `{"url", "username", "password",
+"totp_secret"}` (`totp_secret` optional: the base32 key an authenticator app
+is set up with). The profile's Chromium then runs a built-in extension on each
+login's site (its host without `www.`, subdomains included):
+
+- with one login for the site, an empty sign-in form is filled as soon as it
+  appears — never submitted, never overwritten once filled;
+- a panel pinned to the right edge lists the logins: click the username to
+  fill the form, the password to copy it, the six-digit code (refreshed every
+  30 s) to type it into the code field, or copy it when there is none. The 🔑
+  header folds the panel into a tab.
+
+Responses show each login's `url`, `username` and `totp` (whether it has a
+key), never the password or the key. Chromium reads the extension at launch,
+so a change of logins recreates a running profile, as any PATCH does.
 
 Open `ui_url` in a browser to use the profile. The screen page offers the
 clipboard, file upload/download (`/b/<name>/files`) and a resolution that
@@ -103,8 +121,9 @@ follows the window.
 ```
 $HOST_DATA_DIR/
 └── ie-1/
-    ├── profile.json   # name, proxy (plaintext credentials), timezone, start_url
-    └── config/        # Chromium home: cookies, history, extensions, downloads
+    ├── profile.json   # name, proxy, logins (plaintext credentials), timezone, start_url
+    ├── config/        # Chromium home: cookies, history, extensions, downloads
+    └── extension/     # the saved-logins extension, rewritten at every start
 ```
 
 Back up or move a profile by copying its directory. Credentials are stored in

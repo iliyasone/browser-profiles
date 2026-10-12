@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from app.store import ProfileSpec, Proxy, Store
+from app import extension
+from app.store import Login, ProfileSpec, Proxy, Store
 
 
 def test_proxy_url_quotes_credentials() -> None:
@@ -39,3 +41,22 @@ def test_names_are_restricted(tmp_path: Path) -> None:
         ProfileSpec(name="Bad Name")
     with pytest.raises(KeyError):
         Store(tmp_path).load("../etc")
+
+
+def test_extension_matches_login_sites_only(tmp_path: Path) -> None:
+    extension.write(
+        tmp_path / "ext",
+        [
+            Login(url="https://www.example.com/en/", username="a", password="p"),
+            Login(url="https://other.example.org", username="b", password="q"),
+        ],
+    )
+    manifest = json.loads((tmp_path / "ext" / "manifest.json").read_text())
+    assert manifest["content_scripts"][0]["matches"] == [
+        "*://example.com/*",
+        "*://*.example.com/*",
+        "*://other.example.org/*",
+        "*://*.other.example.org/*",
+    ]
+    assert '"host": "example.com"' in (tmp_path / "ext" / "logins.js").read_text()
+    assert (tmp_path / "ext" / "content.js").is_file()

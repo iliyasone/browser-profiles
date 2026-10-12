@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.idle import IdleStop
 from app.runtime import Runtime, Settings, Status
-from app.store import NAME_PATTERN, ProfileSpec, Proxy, Store
+from app.store import NAME_PATTERN, Login, ProfileSpec, Proxy, Store
 
 EGRESS_URL = os.environ.get("EGRESS_URL", "https://ipinfo.io/json")
 # A running profile with no open screen for this long is stopped (0 = never).
@@ -64,11 +64,19 @@ def store() -> Store:
     return app.state.store
 
 
+class LoginView(BaseModel):
+    url: str
+    username: str
+    totp: bool
+    """Whether the login has an authenticator key; the key itself stays put."""
+
+
 class ProfileView(BaseModel):
     name: str
     proxy: str | None
     timezone: str
     start_url: str
+    logins: list[LoginView]
     status: Status
     ui_url: str
     data_dir: str
@@ -82,6 +90,14 @@ def view(spec: ProfileSpec) -> ProfileView:
         proxy=spec.proxy.redacted() if spec.proxy else None,
         timezone=spec.timezone,
         start_url=spec.start_url,
+        logins=[
+            LoginView(
+                url=login.url,
+                username=login.username,
+                totp=login.totp_secret is not None,
+            )
+            for login in spec.logins
+        ],
         status=runtime().status(spec.name),
         ui_url=f"{s.public_url}/b/{spec.name}/",
         data_dir=str(s.host_data_dir / spec.name),
@@ -101,6 +117,7 @@ class CreateProfile(BaseModel):
     proxy: Proxy | None = None
     timezone: str = "UTC"
     start_url: str = "about:blank"
+    logins: list[Login] = []
     start: bool = True
 
 
@@ -109,6 +126,7 @@ class UpdateProfile(BaseModel):
     clear_proxy: bool = False
     timezone: str | None = None
     start_url: str | None = None
+    logins: list[Login] | None = None
 
 
 @app.get("/healthz")
@@ -138,6 +156,7 @@ def create_profile(body: CreateProfile) -> ProfileView:
         proxy=body.proxy,
         timezone=body.timezone,
         start_url=body.start_url,
+        logins=body.logins,
     )
     store().save(spec)
     if body.start:
@@ -152,13 +171,21 @@ def get_profile(name: str) -> ProfileView:
 
 @app.patch("/profiles/{name}", dependencies=[Depends(require_token)])
 def update_profile(name: str, body: UpdateProfile) -> ProfileView:
-    """Change the proxy, timezone or start URL. A running profile is recreated
-    so the change takes effect; its Chromium home is untouched."""
-    spec = load_or_404(name)
-    changes = body.model_dump(exclude_none=True, exclude={"clear_proxy"})
+    """Change the proxy, timezone, start URL or logins. A running profile is
+    recreated so the change takes effect; its Chromium home is untouched. A
+    PATCH that changes nothing leaves it running, so a caller may send its whole
+    wanted state every time."""
+    current = load_or_404(name)
+    changes = {
+        field: getattr(body, field)
+        for field in body.model_fields_set - {"clear_proxy"}
+        if getattr(body, field) is not None
+    }
     if body.clear_proxy:
         changes["proxy"] = None
-    spec = spec.model_copy(update=changes)
+    spec = current.model_copy(update=changes)
+    if spec == current:
+        return view(spec)
     store().save(spec)
     if runtime().status(name) == "running":
         runtime().remove(name)

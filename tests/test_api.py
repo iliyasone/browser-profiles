@@ -81,3 +81,34 @@ def test_lifecycle(client: TestClient) -> None:
     assert [p["name"] for p in client.get("/profiles", headers=auth).json()] == ["one"]
     assert client.delete("/profiles/one?purge=true", headers=auth).status_code == 204
     assert client.get("/profiles/one", headers=auth).status_code == 404
+
+
+def test_logins_are_redacted_and_an_unchanged_patch_keeps_running(
+    client: TestClient,
+) -> None:
+    auth = {"Authorization": "Bearer secret"}
+    login = {
+        "url": "https://www.example.com/en/",
+        "username": "alice",
+        "password": "hunter2",
+        "totp_secret": "JBSWY3DPEHPK3PXP",
+    }
+    created = client.post(
+        "/profiles", json={"name": "one", "logins": [login]}, headers=auth
+    ).json()
+    assert created["logins"] == [
+        {"url": "https://www.example.com/en/", "username": "alice", "totp": True}
+    ]
+    assert "hunter2" not in str(created)
+
+    runtime = main.app.state.runtime
+    restarts: list[str] = []
+    runtime.remove = restarts.append
+    client.patch("/profiles/one", json={"logins": [login]}, headers=auth)
+    assert restarts == []
+    client.patch(
+        "/profiles/one",
+        json={"logins": [{**login, "password": "changed"}]},
+        headers=auth,
+    )
+    assert restarts == ["one"]

@@ -37,11 +37,23 @@ class Proxy(BaseModel):
         return f"{self.scheme}://{who}{self.host}:{self.port}"
 
 
+class Login(BaseModel):
+    """A sign-in the profile's built-in extension offers on its site: it fills
+    the form and shows the authenticator code computed from `totp_secret`."""
+
+    url: str = Field(pattern=r"^https?://[^/]+")
+    username: str
+    password: str
+    totp_secret: str | None = Field(default=None, pattern=r"^[A-Za-z2-7 =]+$")
+    """Base32, the key an authenticator app is set up with."""
+
+
 class ProfileSpec(BaseModel):
     name: str = Field(pattern=NAME_PATTERN)
     proxy: Proxy | None = None
     timezone: str = "UTC"
     start_url: str = "about:blank"
+    logins: list[Login] = []
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
