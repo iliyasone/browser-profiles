@@ -4,8 +4,9 @@ used on.
 Chromium reads an unpacked extension once, at launch, so the extension is
 written per profile right before its container starts: a static content script
 plus the profile's logins baked into `logins.js` and into the manifest's site
-patterns. The content script runs only on those sites; secrets never reach any
-other page."""
+patterns. The content script runs only on those sites (every login of the
+profile is loaded there, in the extension's isolated world, which the page's
+own scripts cannot read); no other site gets them."""
 
 import json
 import shutil

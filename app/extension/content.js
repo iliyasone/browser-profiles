@@ -290,7 +290,10 @@ function render() {
     body.append(box);
   }
   root.append(panel);
-  document.documentElement.append(host);
+  // A page that rebuilds its document drops the panel; each tick puts it back.
+  ticks.push(() => {
+    if (!host.isConnected) document.documentElement.append(host);
+  });
   return ticks;
 }
 
