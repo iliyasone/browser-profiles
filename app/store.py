@@ -97,4 +97,9 @@ class Store:
             shutil.rmtree(directory, ignore_errors=True)
         else:
             (directory / "profile.json").unlink(missing_ok=True)
-            shutil.rmtree(directory / "extension", ignore_errors=True)
+            self.forget_logins(name)
+
+    def forget_logins(self, name: str) -> None:
+        """Delete the profile's written-out extension, the one copy of its
+        passwords outside `profile.json`; the next start writes it afresh."""
+        shutil.rmtree(self.root / name / "extension", ignore_errors=True)

@@ -101,8 +101,10 @@ A profile may carry `logins`, each `{"url", "username", "password",
 is set up with). The profile's Chromium then runs a built-in extension on each
 login's site (its host without `www.`, subdomains included, https pages only):
 
-- with one login for the site, an empty sign-in form is filled as soon as it
-  appears — never submitted, and a username already typed stays;
+- on the login's own host (with or without `www.`), a sign-in form is filled
+  as soon as it appears — never submitted — when the site has one login, the
+  page has a single password field, and its username is empty or already that
+  login's. Other subdomains get the panel only;
 - a panel pinned to the right edge lists the logins: click the username to
   fill the form, the password to copy it, the six-digit code (refreshed every
   30 s) to type it into the code field, or copy it when no single field is
@@ -112,7 +114,9 @@ login's site (its host without `www.`, subdomains included, https pages only):
 
 Responses show each login's `url`, `username` and `totp` (whether it has a
 key), never the password or the key. Chromium reads the extension at launch,
-so a change of logins recreates a running profile, as any PATCH does.
+so a change of logins recreates a running profile, as any PATCH that changes
+something does; a stopped one gets the new extension at its next start, and
+the old one is deleted right away.
 
 Open `ui_url` in a browser to use the profile. The screen page offers the
 clipboard, file upload/download (`/b/<name>/files`) and a resolution that

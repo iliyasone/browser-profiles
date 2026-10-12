@@ -97,9 +97,6 @@ class Runtime:
                 "mode": "rw",
             }
         }
-        # Rewritten or removed at every start, so passwords dropped from the
-        # spec do not linger on disk.
-        shutil.rmtree(s.data_dir / spec.name / "extension", ignore_errors=True)
         if spec.logins:
             extension.write(s.data_dir / spec.name / "extension", spec.logins)
             volumes[str(s.host_data_dir / spec.name / "extension")] = {
@@ -111,6 +108,9 @@ class Runtime:
                 f"--load-extension={EXTENSION_DIR}",
                 "--disable-features=DisableLoadExtensionCommandLineSwitch",
             ]
+        else:
+            # Passwords dropped from the spec do not linger on disk.
+            shutil.rmtree(s.data_dir / spec.name / "extension", ignore_errors=True)
         environment = {
             "PUID": "1000",
             "PGID": "1000",

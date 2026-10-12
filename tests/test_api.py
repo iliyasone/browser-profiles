@@ -100,6 +100,7 @@ def test_logins_are_redacted_and_an_unchanged_patch_keeps_running(
         {"url": "https://www.example.com/en/", "username": "alice", "totp": True}
     ]
     assert "hunter2" not in str(created)
+    assert "JBSWY3DPEHPK3PXP" not in str(created)
 
     runtime = main.app.state.runtime
     restarts: list[str] = []
@@ -118,3 +119,20 @@ def test_logins_are_redacted_and_an_unchanged_patch_keeps_running(
         headers=auth,
     )
     assert restarts == ["one"]
+
+
+def test_changed_logins_leave_no_old_extension_on_a_stopped_profile(
+    client: TestClient, tmp_path: Path
+) -> None:
+    auth = {"Authorization": "Bearer secret"}
+    login = {"url": "https://example.com", "username": "a", "password": "old"}
+    client.post(
+        "/profiles",
+        json={"name": "one", "logins": [login], "start": False},
+        headers=auth,
+    )
+    (tmp_path / "one" / "extension").mkdir()
+    client.patch(
+        "/profiles/one", json={"logins": [{**login, "password": "new"}]}, headers=auth
+    )
+    assert not (tmp_path / "one" / "extension").exists()

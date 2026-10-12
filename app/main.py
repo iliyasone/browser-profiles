@@ -187,6 +187,9 @@ def update_profile(name: str, body: UpdateProfile) -> ProfileView:
     if spec == current:
         return view(spec)
     store().save(spec)
+    # A stopped profile gets its extension at the next start; until then the
+    # old logins must not stay on disk.
+    store().forget_logins(name)
     if runtime().status(name) == "running":
         runtime().remove(name)
         runtime().start(spec)

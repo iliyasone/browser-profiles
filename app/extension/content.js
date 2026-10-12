@@ -1,8 +1,11 @@
-// Saved logins on this site (https pages only). With one login for the site,
-// an empty sign-in form is filled as soon as it shows up: never submitted, and
-// a username already typed stays. A panel pinned to the right edge lists every login: click the
-// username to fill the form, the password to copy it, and the authenticator
-// code to type it into the code field (or copy it when there is none).
+// Saved logins on this site (https pages only, subdomains included). A panel
+// pinned to the right edge lists every login: click the username to fill the
+// sign-in form, the password to copy it, and the authenticator code to type it
+// into the code field (or copy it when no field is clearly the one).
+// Unasked, a sign-in form is filled only on the login's own host, with one
+// login there, when it is the only password field on the page and its username
+// is empty or already this login's; never submitted. Another subdomain may be
+// a third party's page, so there the panel has to be clicked.
 // SAVED_LOGINS comes from logins.js, written per profile.
 
 const PERIOD_MS = 30000;
@@ -79,14 +82,23 @@ function codeFields() {
   return boxes.length === 6 ? boxes : [];
 }
 
-function fillLogin(login) {
-  const fields = loginFields();
-  if (!fields) return false;
-  if (fields.username && !fields.username.value) {
-    setValue(fields.username, login.username);
-  }
+function fillLogin(login, fields) {
+  if (fields.username) setValue(fields.username, login.username);
   setValue(fields.password, login.password);
-  return true;
+}
+
+// The form to fill unasked, or null when filling it could misfire: a sign-up
+// or change-password page, or a username typed for another account.
+function autofillFields(login) {
+  const own = location.hostname.replace(/^www\./, "") === login.host;
+  const passwords = [
+    ...document.querySelectorAll('input[type="password"]'),
+  ].filter(visible);
+  if (!own || passwords.length !== 1) return null;
+  if (passwords[0].autocomplete === "new-password") return null;
+  const fields = loginFields();
+  const typed = fields.username?.value;
+  return typed && typed !== login.username ? null : fields;
 }
 
 async function copy(text) {
@@ -143,7 +155,7 @@ async function totp(secret, now) {
 async function useCode(secret, flash) {
   const left = PERIOD_MS - (Date.now() % PERIOD_MS);
   if (left < 10000) {
-    flash(`next code in ${Math.ceil(left / 1000)} s…`);
+    flash(`next code in ${Math.ceil(left / 1000)} s…`, left + 100);
     setTimeout(() => useCode(secret, flash), left + 100);
     return;
   }
@@ -213,10 +225,10 @@ function render() {
     const flashLine = document.createElement("div");
     flashLine.className = "flash";
     let flashTimer;
-    const flash = (text) => {
+    const flash = (text, holdMs = 1500) => {
       flashLine.textContent = text;
       clearTimeout(flashTimer);
-      flashTimer = setTimeout(() => (flashLine.textContent = ""), 1500);
+      flashTimer = setTimeout(() => (flashLine.textContent = ""), holdMs);
     };
     const row = (label, value, onClick) => {
       const element = document.createElement("div");
@@ -230,8 +242,11 @@ function render() {
       return element;
     };
     row("login", login.username, async () => {
-      if (fillLogin(login)) flash("filled");
-      else {
+      const fields = loginFields();
+      if (fields) {
+        fillLogin(login, fields);
+        flash("filled");
+      } else {
         await copy(login.username);
         flash("copied");
       }
@@ -268,10 +283,10 @@ if (logins.length > 0) {
   const tick = () => {
     ticks.forEach((update) => update());
     if (logins.length === 1) {
-      const fields = loginFields();
+      const fields = autofillFields(logins[0]);
       if (fields && !filled.has(fields.password) && !fields.password.value) {
         filled.add(fields.password);
-        fillLogin(logins[0]);
+        fillLogin(logins[0], fields);
       }
     }
   };
