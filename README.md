@@ -104,12 +104,14 @@ login's site (its host without `www.`, subdomains included, https pages only):
 - on the login's own host (with or without `www.`), a sign-in form is filled
   as soon as it appears — never submitted — when the site has one login, the
   page has a single password field, and its username is empty or already that
-  login's. Other subdomains get the panel only;
+  login's (the username goes only into a field that names itself one). Other
+  subdomains get the panel only;
 - a panel pinned to the right edge lists the logins: click the username to
   fill the form, the password to copy it, the six-digit code (refreshed every
   30 s) to type it into the code field, or copy it when no single field is
-  clearly the code field. With under 10 s left it waits for the next code, so
-  the code is still valid by the time you press submit. The 🔑
+  clearly the code field. With under 10 s left a fill waits for the next code
+  and a copy asks for another click then, so the code is still valid by the
+  time you press submit. The 🔑
   header folds the panel into a tab.
 
 Responses show each login's `url`, `username` and `totp` (whether it has a
@@ -129,8 +131,9 @@ $HOST_DATA_DIR/
 └── ie-1/
     ├── profile.json   # name, proxy, logins (plaintext credentials), timezone, start_url
     ├── config/        # Chromium home: cookies, history, extensions, downloads
-    └── extension/     # the saved-logins extension, rewritten at every start,
-                       # removed with the logins or the profile
+    └── extension/     # the saved-logins extension, written whenever the
+                       # containers are created, deleted when the logins
+                       # change or the profile is forgotten
 ```
 
 Back up or move a profile by copying its directory. Credentials are stored in

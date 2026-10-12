@@ -121,7 +121,7 @@ def test_logins_are_redacted_and_an_unchanged_patch_keeps_running(
     assert restarts == ["one"]
 
 
-def test_changed_logins_leave_no_old_extension_on_a_stopped_profile(
+def test_changed_logins_leave_no_old_extension_on_a_profile_not_running(
     client: TestClient, tmp_path: Path
 ) -> None:
     auth = {"Authorization": "Bearer secret"}

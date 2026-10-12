@@ -4,8 +4,9 @@
 // into the code field (or copy it when no field is clearly the one).
 // Unasked, a sign-in form is filled only on the login's own host, with one
 // login there, when it is the only password field on the page and its username
-// is empty or already this login's; never submitted. Another subdomain may be
-// a third party's page, so there the panel has to be clicked.
+// is empty or already this login's; never submitted. The username goes only
+// into a field that names itself one. Another subdomain may be a third
+// party's page, so there the panel has to be clicked.
 // SAVED_LOGINS comes from logins.js, written per profile.
 
 const PERIOD_MS = 30000;
@@ -35,9 +36,11 @@ function setValue(input, value) {
 }
 
 // The visible password field and its username field: among the text fields
-// before it (in its form, if it has one), the one that says it is a login,
-// else the nearest.
-function loginFields() {
+// before it (in its form, if it has one), the one that says it is a login.
+// With `guess`, else the nearest one — fine when the operator asked for the
+// fill, not when nobody did: on a password-confirm step the nearest field may
+// be an amount or a wallet address.
+function loginFields(guess) {
   const password = [
     ...document.querySelectorAll('input[type="password"]'),
   ].find(visible);
@@ -54,9 +57,13 @@ function loginFields() {
   const named = before.findLast(
     (input) =>
       input.autocomplete === "username" ||
-      /user|login|email|account/i.test(input.name + " " + input.id),
+      input.autocomplete === "email" ||
+      /user|login|e?mail/i.test(input.name + " " + input.id),
   );
-  return { username: named ?? before.at(-1) ?? null, password };
+  return {
+    username: named ?? (guess ? before.at(-1) : null) ?? null,
+    password,
+  };
 }
 
 // A single code field, or a row of six one-digit boxes. A field marked
@@ -74,7 +81,9 @@ function codeFields() {
     const text = [input.name, input.id, input.placeholder, input.ariaLabel].join(" ");
     return (
       /otp|2fa|totp|verif|code/i.test(text) &&
-      !/captcha|promo|bonus|post|zip|country|phone/i.test(text)
+      !/captcha|promo|bonus|coupon|voucher|referr|invite|post|zip|country|phone|sms|mail/i.test(
+        text,
+      )
     );
   });
   if (named.length === 1) return named;
@@ -96,21 +105,26 @@ function autofillFields(login) {
   ].filter(visible);
   if (!own || passwords.length !== 1) return null;
   if (passwords[0].autocomplete === "new-password") return null;
-  const fields = loginFields();
+  const fields = loginFields(false);
   const typed = fields.username?.value;
   return typed && typed !== login.username ? null : fields;
 }
 
+// "copied" or "copy failed": a copy needs a fresh click, and a panel that
+// claims a copy that did not happen leaves the old clipboard (a password) to
+// be pasted as the code.
 async function copy(text) {
   try {
     await navigator.clipboard.writeText(text);
+    return "copied";
   } catch {
     const area = document.createElement("textarea");
     area.value = text;
     document.body.append(area);
     area.select();
-    document.execCommand("copy");
+    const done = document.execCommand("copy");
     area.remove();
+    return done ? "copied" : "copy failed";
   }
 }
 
@@ -149,28 +163,29 @@ async function totp(secret, now) {
   return value.toString().padStart(6, "0");
 }
 
-// Types the current code into the code field. The operator still has to press
-// submit through the remote screen, and a code that expires on the way counts
-// as a wrong one upstream: with under 10 s left, the next code is waited for.
+// Types the current code into the code field, else copies it. The operator
+// still has to press submit through the remote screen, and a code that
+// expires on the way counts as a wrong one upstream: with under 10 s left, a
+// fill waits for the next code; a copy cannot wait (it needs the click), so it
+// asks for another click instead.
 async function useCode(secret, flash) {
   const left = PERIOD_MS - (Date.now() % PERIOD_MS);
+  const seconds = Math.ceil(left / 1000);
+  const fields = codeFields();
+  if (fields.length === 0) {
+    if (left < 10000) flash(`new code in ${seconds} s, click again then`);
+    else flash(await copy(await totp(secret, Date.now())));
+    return;
+  }
   if (left < 10000) {
-    flash(`next code in ${Math.ceil(left / 1000)} s…`, left + 100);
+    flash(`next code in ${seconds} s…`, left + 100);
     setTimeout(() => useCode(secret, flash), left + 100);
     return;
   }
   const code = await totp(secret, Date.now());
-  const fields = codeFields();
-  if (fields.length === 1) {
-    setValue(fields[0], code);
-    flash("filled");
-  } else if (fields.length === 6) {
-    fields.forEach((field, i) => setValue(field, code[i]));
-    flash("filled");
-  } else {
-    await copy(code);
-    flash("copied");
-  }
+  if (fields.length === 1) setValue(fields[0], code);
+  else fields.forEach((field, i) => setValue(field, code[i]));
+  flash("filled");
 }
 
 const STYLE = `
@@ -242,18 +257,16 @@ function render() {
       return element;
     };
     row("login", login.username, async () => {
-      const fields = loginFields();
+      const fields = loginFields(true);
       if (fields) {
         fillLogin(login, fields);
         flash("filled");
       } else {
-        await copy(login.username);
-        flash("copied");
+        flash(await copy(login.username));
       }
     });
     row("password", "••••••••", async () => {
-      await copy(login.password);
-      flash("copied");
+      flash(await copy(login.password));
     });
     if (login.totp_secret) {
       const code = row("code", "", () => useCode(login.totp_secret, flash));
