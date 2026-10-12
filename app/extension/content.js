@@ -5,8 +5,8 @@
 // Unasked, a sign-in form is filled only on the login's own host, with one
 // login there, when it is the only password field on the page and its username
 // is empty or already this login's; never submitted. Without a field that
-// names itself the username, nothing is filled unasked. Another subdomain may be a third
-// party's page, so there the panel has to be clicked.
+// names itself the username, nothing is filled unasked. Another subdomain may
+// be a third party's page, so there the panel has to be clicked.
 // SAVED_LOGINS comes from logins.js, written per profile.
 
 const PERIOD_MS = 30000;
