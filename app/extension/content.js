@@ -4,8 +4,8 @@
 // into the code field (or copy it when no field is clearly the one).
 // Unasked, a sign-in form is filled only on the login's own host, with one
 // login there, when it is the only password field on the page and its username
-// is empty or already this login's; never submitted. The username goes only
-// into a field that names itself one. Another subdomain may be a third
+// is empty or already this login's; never submitted. Without a field that
+// names itself the username, nothing is filled unasked. Another subdomain may be a third
 // party's page, so there the panel has to be clicked.
 // SAVED_LOGINS comes from logins.js, written per profile.
 
@@ -66,7 +66,9 @@ function loginFields(guess) {
   };
 }
 
-// A single code field, or a row of six one-digit boxes. A field marked
+// A row of six one-digit boxes, or a single code field. The row comes first:
+// such rows often mark only their first box as the code field, and six digits
+// typed into it would end up as one. Of single fields, one marked
 // `one-time-code` wins; otherwise its name must say so and not be one of the
 // other codes a page asks for. More than one candidate is a guess: none.
 function codeFields() {
@@ -75,6 +77,8 @@ function codeFields() {
       'input:not([type]), input[type="text"], input[type="tel"], input[type="number"]',
     ),
   ].filter(visible);
+  const boxes = inputs.filter((input) => input.maxLength === 1);
+  if (boxes.length === 6) return boxes;
   const marked = inputs.filter((input) => input.autocomplete === "one-time-code");
   if (marked.length === 1) return marked;
   const named = inputs.filter((input) => {
@@ -86,9 +90,7 @@ function codeFields() {
       )
     );
   });
-  if (named.length === 1) return named;
-  const boxes = inputs.filter((input) => input.maxLength === 1);
-  return boxes.length === 6 ? boxes : [];
+  return named.length === 1 ? named : [];
 }
 
 function fillLogin(login, fields) {
@@ -97,7 +99,8 @@ function fillLogin(login, fields) {
 }
 
 // The form to fill unasked, or null when filling it could misfire: a sign-up
-// or change-password page, or a username typed for another account.
+// or change-password page, a password-confirm step with no username field, or
+// a username typed for another account.
 function autofillFields(login) {
   const own = location.hostname.replace(/^www\./, "") === login.host;
   const passwords = [
@@ -106,7 +109,8 @@ function autofillFields(login) {
   if (!own || passwords.length !== 1) return null;
   if (passwords[0].autocomplete === "new-password") return null;
   const fields = loginFields(false);
-  const typed = fields.username?.value;
+  if (!fields.username) return null;
+  const typed = fields.username.value;
   return typed && typed !== login.username ? null : fields;
 }
 

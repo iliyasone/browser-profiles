@@ -104,7 +104,7 @@ login's site (its host without `www.`, subdomains included, https pages only):
 - on the login's own host (with or without `www.`), a sign-in form is filled
   as soon as it appears — never submitted — when the site has one login, the
   page has a single password field, and its username is empty or already that
-  login's (the username goes only into a field that names itself one). Other
+  login's (a username field that names itself one is required). Other
   subdomains get the panel only;
 - a panel pinned to the right edge lists the logins: click the username to
   fill the form, the password to copy it, the six-digit code (refreshed every
@@ -131,9 +131,10 @@ $HOST_DATA_DIR/
 └── ie-1/
     ├── profile.json   # name, proxy, logins (plaintext credentials), timezone, start_url
     ├── config/        # Chromium home: cookies, history, extensions, downloads
-    └── extension/     # the saved-logins extension, written whenever the
-                       # containers are created, deleted when the logins
-                       # change or the profile is forgotten
+    └── extension/     # the saved-logins extension: written when the
+                       # containers of a profile with logins are created,
+                       # deleted on any change to the profile or when it
+                       # is forgotten
 ```
 
 Back up or move a profile by copying its directory. Credentials are stored in
