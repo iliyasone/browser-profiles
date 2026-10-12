@@ -106,6 +106,12 @@ def test_logins_are_redacted_and_an_unchanged_patch_keeps_running(
     runtime.remove = restarts.append
     client.patch("/profiles/one", json={"logins": [login]}, headers=auth)
     assert restarts == []
+    # Omitted optional fields compare equal to their stored defaults.
+    bare = {k: v for k, v in login.items() if k != "totp_secret"}
+    client.patch("/profiles/one", json={"logins": [bare]}, headers=auth)
+    client.patch("/profiles/one", json={"logins": [bare]}, headers=auth)
+    assert restarts == ["one"]
+    restarts.clear()
     client.patch(
         "/profiles/one",
         json={"logins": [{**login, "password": "changed"}]},

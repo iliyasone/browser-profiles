@@ -1,6 +1,6 @@
-// Saved logins on this site. With one login for the site, an empty sign-in
-// form is filled as soon as it shows up (never submitted, never overwritten
-// once filled). A panel pinned to the right edge lists every login: click the
+// Saved logins on this site (https pages only). With one login for the site,
+// an empty sign-in form is filled as soon as it shows up: never submitted, and
+// a username already typed stays. A panel pinned to the right edge lists every login: click the
 // username to fill the form, the password to copy it, and the authenticator
 // code to type it into the code field (or copy it when there is none).
 // SAVED_LOGINS comes from logins.js, written per profile.
@@ -31,7 +31,9 @@ function setValue(input, value) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-// The visible password field and the text field right before it.
+// The visible password field and its username field: among the text fields
+// before it (in its form, if it has one), the one that says it is a login,
+// else the nearest.
 function loginFields() {
   const password = [
     ...document.querySelectorAll('input[type="password"]'),
@@ -46,23 +48,33 @@ function loginFields() {
       visible(input) &&
       input.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING,
   );
-  return { username: before.at(-1) ?? null, password };
+  const named = before.findLast(
+    (input) =>
+      input.autocomplete === "username" ||
+      /user|login|email|account/i.test(input.name + " " + input.id),
+  );
+  return { username: named ?? before.at(-1) ?? null, password };
 }
 
-// A single code field, or a row of six one-digit boxes.
+// A single code field, or a row of six one-digit boxes. A field marked
+// `one-time-code` wins; otherwise its name must say so and not be one of the
+// other codes a page asks for. More than one candidate is a guess: none.
 function codeFields() {
-  const inputs = [...document.querySelectorAll("input")].filter(
-    (input) =>
-      visible(input) && input.type !== "password" && input.type !== "hidden",
-  );
-  const single = inputs.find(
-    (input) =>
-      input.autocomplete === "one-time-code" ||
-      /otp|2fa|totp|verif|code/i.test(
-        [input.name, input.id, input.placeholder, input.ariaLabel].join(" "),
-      ),
-  );
-  if (single) return [single];
+  const inputs = [
+    ...document.querySelectorAll(
+      'input:not([type]), input[type="text"], input[type="tel"], input[type="number"]',
+    ),
+  ].filter(visible);
+  const marked = inputs.filter((input) => input.autocomplete === "one-time-code");
+  if (marked.length === 1) return marked;
+  const named = inputs.filter((input) => {
+    const text = [input.name, input.id, input.placeholder, input.ariaLabel].join(" ");
+    return (
+      /otp|2fa|totp|verif|code/i.test(text) &&
+      !/captcha|promo|bonus|post|zip|country|phone/i.test(text)
+    );
+  });
+  if (named.length === 1) return named;
   const boxes = inputs.filter((input) => input.maxLength === 1);
   return boxes.length === 6 ? boxes : [];
 }
@@ -70,7 +82,9 @@ function codeFields() {
 function fillLogin(login) {
   const fields = loginFields();
   if (!fields) return false;
-  if (fields.username) setValue(fields.username, login.username);
+  if (fields.username && !fields.username.value) {
+    setValue(fields.username, login.username);
+  }
   setValue(fields.password, login.password);
   return true;
 }
@@ -123,12 +137,13 @@ async function totp(secret, now) {
   return value.toString().padStart(6, "0");
 }
 
-// Types the current code into the code field. A code with under 3 s left
-// would likely expire on the way, so the next one is waited for instead.
+// Types the current code into the code field. The operator still has to press
+// submit through the remote screen, and a code that expires on the way counts
+// as a wrong one upstream: with under 10 s left, the next code is waited for.
 async function useCode(secret, flash) {
   const left = PERIOD_MS - (Date.now() % PERIOD_MS);
-  if (left < 3000) {
-    flash("wait…");
+  if (left < 10000) {
+    flash(`next code in ${Math.ceil(left / 1000)} s…`);
     setTimeout(() => useCode(secret, flash), left + 100);
     return;
   }
@@ -176,16 +191,16 @@ function render() {
   root.innerHTML = `<style>${STYLE}</style>`;
   const panel = document.createElement("div");
   panel.className = "panel";
-  panel.classList.toggle(
-    "collapsed",
-    localStorage.getItem(COLLAPSED_KEY) === "1",
-  );
+  // Extension storage, not the site's: the page should not find our traces.
+  chrome.storage.local.get(COLLAPSED_KEY).then((stored) => {
+    panel.classList.toggle("collapsed", stored[COLLAPSED_KEY] === true);
+  });
   const head = document.createElement("div");
   head.className = "head";
   head.innerHTML = `<span>🔑</span><span class="title">saved logins</span>`;
   head.onclick = () => {
     const collapsed = panel.classList.toggle("collapsed");
-    localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    chrome.storage.local.set({ [COLLAPSED_KEY]: collapsed });
   };
   const body = document.createElement("div");
   body.className = "body";

@@ -3,6 +3,7 @@ plus, when the profile has a proxy, a forwarder sharing its network namespace
 so Chromium can use an authenticated upstream through plain 127.0.0.1:18080."""
 
 import os
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,6 +97,9 @@ class Runtime:
                 "mode": "rw",
             }
         }
+        # Rewritten or removed at every start, so passwords dropped from the
+        # spec do not linger on disk.
+        shutil.rmtree(s.data_dir / spec.name / "extension", ignore_errors=True)
         if spec.logins:
             extension.write(s.data_dir / spec.name / "extension", spec.logins)
             volumes[str(s.host_data_dir / spec.name / "extension")] = {

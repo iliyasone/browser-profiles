@@ -88,7 +88,8 @@ class Store:
         (directory / "profile.json").write_text(spec.model_dump_json(indent=2) + "\n")
 
     def delete(self, name: str, purge: bool) -> None:
-        """Forget the profile; with `purge` also destroy its Chromium home."""
+        """Forget the profile and its saved logins; with `purge` also destroy its
+        Chromium home."""
         if not _NAME_RE.match(name):
             raise KeyError(name)
         directory = self.root / name
@@ -96,3 +97,4 @@ class Store:
             shutil.rmtree(directory, ignore_errors=True)
         else:
             (directory / "profile.json").unlink(missing_ok=True)
+            shutil.rmtree(directory / "extension", ignore_errors=True)

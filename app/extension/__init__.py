@@ -35,7 +35,9 @@ def write(directory: Path, logins: list[Login]) -> None:
                 "totp_secret": login.totp_secret,
             }
         )
-        for pattern in (f"*://{host}/*", f"*://*.{host}/*"):
+        # https only: the profile's traffic crosses a third-party proxy, which
+        # could serve a plain-http page with a password field of its own.
+        for pattern in (f"https://{host}/*", f"https://*.{host}/*"):
             if pattern not in patterns:
                 patterns.append(pattern)
     manifest = {
@@ -43,6 +45,7 @@ def write(directory: Path, logins: list[Login]) -> None:
         "name": "Saved logins",
         "version": "1.0",
         "description": "Fills this profile's sign-in forms and shows their codes.",
+        "permissions": ["storage"],
         "content_scripts": [
             {
                 "matches": patterns,

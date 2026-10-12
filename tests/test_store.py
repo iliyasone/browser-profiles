@@ -27,8 +27,10 @@ def test_store_roundtrip_and_delete(tmp_path: Path) -> None:
     assert store.load("ie-1") == spec
     assert [s.name for s in store.list()] == ["ie-1"]
 
+    (tmp_path / "ie-1" / "extension").mkdir()
     store.delete("ie-1", purge=False)
     assert not store.exists("ie-1")
+    assert not (tmp_path / "ie-1" / "extension").exists()  # saved logins gone
     assert (tmp_path / "ie-1" / "config").is_dir()  # data kept
 
     store.save(spec)
@@ -53,10 +55,10 @@ def test_extension_matches_login_sites_only(tmp_path: Path) -> None:
     )
     manifest = json.loads((tmp_path / "ext" / "manifest.json").read_text())
     assert manifest["content_scripts"][0]["matches"] == [
-        "*://example.com/*",
-        "*://*.example.com/*",
-        "*://other.example.org/*",
-        "*://*.other.example.org/*",
+        "https://example.com/*",
+        "https://*.example.com/*",
+        "https://other.example.org/*",
+        "https://*.other.example.org/*",
     ]
     assert '"host": "example.com"' in (tmp_path / "ext" / "logins.js").read_text()
     assert (tmp_path / "ext" / "content.js").is_file()
